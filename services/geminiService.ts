@@ -15,11 +15,7 @@ const SAFETY_SETTINGS = [
 ];
 
 class GeminiService {
-  private ai: GoogleGenAI;
-
-  constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  }
+  // Removed static instance of ai to prevent stale key usage
 
   private getModelConfig(modelId: ModelId, imageGenConfig?: ImageGenConfig) {
     switch (modelId) {
@@ -68,8 +64,6 @@ class GeminiService {
                imageConfig: {
                    aspectRatio: imageGenConfig?.aspectRatio || "1:1",
                }
-               // Note: safetySettings might behave differently for image models, keeping defaults or minimal if needed, 
-               // but text prompts for image gen usually follow similar rules.
            }
         };
       default:
@@ -91,6 +85,9 @@ class GeminiService {
       imageGenConfig?: ImageGenConfig
     ): AsyncGenerator<string, void, unknown> {
     
+    // IMPORTANT: Initialize AI here to ensure the latest API key is used
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
     const { model, config } = this.getModelConfig(modelId, imageGenConfig);
 
     // Special handling for Imagine model (Image Generation)
@@ -105,7 +102,7 @@ class GeminiService {
 
         // Generate content (non-streaming for images usually)
         try {
-            const response = await this.ai.models.generateContent({
+            const response = await ai.models.generateContent({
                 model: model,
                 contents: {
                     parts: [{ text: prompt }]
@@ -152,7 +149,7 @@ class GeminiService {
     }));
 
     // Initialize chat with the specific model and config
-    const chat = this.ai.chats.create({
+    const chat = ai.chats.create({
       model: model,
       config: config,
       history: chatHistory

@@ -13,12 +13,10 @@ import {
   Gem,
   ChevronDown,
   Check,
-  Code,
-  Globe,
   Palette,
-  LayoutTemplate,
-  Ban,
-  ImageIcon as ImageIconLucide
+  XCircle,
+  X,
+  Copy
 } from 'lucide-react';
 import { Message, ModelId, ImageGenConfig } from '../types';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -32,6 +30,7 @@ interface ChatAreaProps {
   sessionTitle?: string;
   modelId?: ModelId;
   onModelChange?: (id: ModelId) => void;
+  onDeleteMessage?: (id: string) => void;
 }
 
 const YahyaLogo = ({ className }: { className?: string }) => (
@@ -48,6 +47,14 @@ const YahyaLogo = ({ className }: { className?: string }) => (
   </svg>
 );
 
+const TypingIndicator = () => (
+  <div className="flex items-center gap-1.5 py-1">
+    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-[bounce_1s_infinite_-0.3s]"></div>
+    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-[bounce_1s_infinite_-0.15s]"></div>
+    <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-[bounce_1s_infinite]"></div>
+  </div>
+);
+
 const ChatArea: React.FC<ChatAreaProps> = ({ 
   messages, 
   isGenerating, 
@@ -56,12 +63,14 @@ const ChatArea: React.FC<ChatAreaProps> = ({
   onClearConversation,
   sessionTitle,
   modelId = 'flash',
-  onModelChange
+  onModelChange,
+  onDeleteMessage
 }) => {
   const [inputText, setInputText] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   
   // Image Generation Settings
   const [imageConfig, setImageConfig] = useState<ImageGenConfig>({
@@ -116,6 +125,12 @@ const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
+  const handleCopyMessage = (text: string, id: string) => {
+      navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+  };
+
   const confirmClear = () => {
     onClearConversation();
     setShowClearConfirm(false);
@@ -165,16 +180,11 @@ const ChatArea: React.FC<ChatAreaProps> = ({
          onModelChange(suggestion.modelId as ModelId);
     }
     
-    // We need to wait for state update if we just changed model, 
-    // but onSendMessage uses the current prop modelId if we passed it down.
-    // Ideally the parent handles the model switch and then sends. 
-    // For now, we will just send.
     onSendMessage(suggestion.text, undefined, suggestion.modelId === 'imagine' ? imageConfig : undefined);
   };
 
   const aspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4'];
-  const styles = ['Photorealistic', 'Anime', 'Digital Art', 'Oil Painting', 'Watercolor', 'Sketch', '3D Render', 'Cyberpunk', 'Steampunk'];
-
+  
   return (
     <div className="flex-1 flex flex-col h-full relative bg-zinc-950">
       
@@ -188,7 +198,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({
                         <h3 className="text-lg font-bold text-white">Clear Conversation?</h3>
                     </div>
                     <p className="text-zinc-400 text-sm leading-relaxed">
-                        Are you sure you want to clear all messages in this conversation? This action cannot be undone.
+                        This will remove all messages from the current session. This action cannot be undone.
                     </p>
                 </div>
                 <div className="flex items-center justify-end gap-3 px-6 py-4 bg-zinc-950/50 border-t border-zinc-800">
@@ -210,179 +220,155 @@ const ChatArea: React.FC<ChatAreaProps> = ({
       )}
 
       {/* Header */}
-      <div className="p-4 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur sticky top-0 z-30 flex items-center justify-between min-h-[64px]">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-            <button onClick={onSidebarToggle} className="lg:hidden p-2 -ml-2 text-zinc-400 hover:text-white transition-colors shrink-0">
-                <Menu className="w-6 h-6" />
-            </button>
-            <div className="flex flex-col min-w-0">
-                <span className="font-semibold text-zinc-100 truncate text-sm md:text-base">
-                    {sessionTitle || "New Conversation"}
-                </span>
-                
-                {/* Model Selector Dropdown */}
-                <div className="relative mt-0.5">
-                    <button 
-                        onClick={() => setShowModelSelector(!showModelSelector)}
-                        className="group flex items-center gap-1.5 text-[10px] md:text-xs font-medium text-zinc-400 hover:text-indigo-400 transition-colors py-0.5 rounded-md focus:outline-none"
-                    >
-                        <span className="flex items-center gap-1.5">
-                            {React.cloneElement(currentModel.icon as React.ReactElement<{ className?: string }>, { className: "w-3 h-3" })}
-                            {currentModel.name}
-                        </span>
-                        <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showModelSelector ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {showModelSelector && (
-                        <>
-                            <div className="fixed inset-0 z-40" onClick={() => setShowModelSelector(false)} />
-                            <div className="absolute top-full left-0 mt-2 w-72 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl shadow-black/50 z-50 p-1.5 animate-in fade-in zoom-in-95 duration-200">
-                                <div className="px-3 py-2 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                                    Select Model
-                                </div>
-                                <div className="space-y-0.5">
-                                {models.map((m) => {
-                                    const isSelected = modelId === m.id;
-                                    return (
-                                    <button
-                                        key={m.id}
-                                        onClick={() => {
-                                            onModelChange?.(m.id);
-                                            setShowModelSelector(false);
-                                        }}
-                                        className={`w-full text-left px-3 py-2.5 rounded-lg flex items-start gap-3 transition-all ${
-                                            isSelected 
-                                                ? 'bg-zinc-800 text-zinc-100' 
-                                                : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200'
-                                        }`}
-                                    >
-                                        <div className={`mt-0.5 p-1.5 rounded-md bg-zinc-950 border border-zinc-800 ${isSelected ? 'ring-1 ring-indigo-500/50 border-indigo-500/50' : ''}`}>
-                                            {m.icon}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="text-xs font-semibold">{m.name}</div>
-                                                {isSelected && <Check className="w-3 h-3 text-indigo-400" />}
-                                            </div>
-                                            <div className="text-[10px] text-zinc-500 leading-tight mt-0.5 truncate">{m.desc}</div>
-                                        </div>
-                                    </button>
-                                    );
-                                })}
-                                </div>
-                            </div>
-                        </>
-                    )}
-                </div>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-30">
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={onSidebarToggle}
+            className="p-2 -ml-2 rounded-lg hover:bg-zinc-800 lg:hidden text-zinc-400 hover:text-zinc-100 transition-colors"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="flex flex-col">
+            <h2 className="font-semibold text-zinc-100 text-sm truncate max-w-[150px] sm:max-w-md">
+                {sessionTitle || "New Conversation"}
+            </h2>
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+                {currentModel.icon}
+                <span>{currentModel.name}</span>
             </div>
+          </div>
         </div>
-        
-        {messages.length > 0 && (
-            <button 
-                onClick={() => setShowClearConfirm(true)}
-                className="p-2 ml-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all shrink-0"
-                title="Clear conversation"
+
+        <div className="flex items-center gap-2">
+           <button 
+              onClick={() => setShowClearConfirm(true)}
+              className="p-2 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-all"
+              title="Clear Conversation"
             >
-                <Trash2 className="w-5 h-5" />
+              <Trash2 className="w-4 h-4" />
             </button>
-        )}
+        </div>
       </div>
 
-      {/* Messages List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6 lg:p-8 scroll-smooth">
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-8 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-8 animate-in fade-in duration-500">
-            <div className="flex flex-col items-center space-y-4">
-                <div className="w-20 h-20 mb-2 relative group">
-                    <div className="absolute inset-0 bg-indigo-500/20 rounded-2xl blur-xl group-hover:bg-indigo-500/30 transition-all duration-500"></div>
-                    <YahyaLogo className="w-full h-full relative z-10 shadow-2xl" />
-                </div>
-                <div className="text-center space-y-2">
-                    <h2 className="text-2xl font-bold text-white tracking-tight">How can I help you today?</h2>
-                    <p className="text-zinc-400 max-w-md text-sm">
-                        I'm ready to assist you with coding, analysis, creative writing, and more using <span className="text-zinc-300 font-medium">{currentModel.name}</span>.
-                    </p>
-                </div>
+          <div className="h-full flex flex-col items-center justify-center text-center p-8 animate-in fade-in zoom-in-95 duration-500">
+            <div className="w-20 h-20 mb-6 relative">
+                 <div className="absolute inset-0 bg-indigo-500/20 blur-xl rounded-full" />
+                 <YahyaLogo className="w-full h-full relative z-10" />
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-2xl w-full px-4">
-               {suggestions.map((suggestion, index) => (
-                   <button 
-                    key={index}
-                    onClick={() => handleSuggestionClick(suggestion)}
-                    disabled={isGenerating}
-                    className="group p-4 bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800/60 hover:border-indigo-500/30 rounded-xl text-left transition-all duration-200 hover:shadow-lg hover:shadow-indigo-500/5 flex flex-col gap-2"
-                   >
-                       <div className="flex items-center gap-2 text-zinc-300 font-medium text-sm group-hover:text-indigo-400 transition-colors">
-                            {suggestion.icon}
-                            <span>{suggestion.label}</span>
-                       </div>
-                       <p className="text-xs text-zinc-500 group-hover:text-zinc-400 line-clamp-2">
-                           "{suggestion.text}"
-                       </p>
-                   </button>
-               ))}
+            <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 mb-2">
+              Yahya AI V2
+            </h1>
+            <p className="text-zinc-500 max-w-md mb-8 leading-relaxed">
+              Experience the next generation of intelligence. How can I assist you today?
+            </p>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-2xl">
+              {suggestions.map((s, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSuggestionClick(s)}
+                  className="text-left p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 hover:bg-zinc-800/80 hover:border-indigo-500/30 transition-all group flex items-start gap-3"
+                >
+                  <div className="mt-0.5 p-1.5 rounded-lg bg-zinc-950 border border-zinc-800 group-hover:border-indigo-500/30 group-hover:bg-indigo-500/10 transition-colors">
+                     {s.icon}
+                  </div>
+                  <div>
+                    <div className="text-xs font-medium text-zinc-500 mb-1 group-hover:text-indigo-400 transition-colors">{s.label}</div>
+                    <div className="text-sm text-zinc-300 leading-snug">{s.text}</div>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex gap-4 max-w-4xl mx-auto ${
-                msg.role === 'user' ? 'justify-end' : 'justify-start'
-              }`}
+          messages.map((message) => (
+            <div 
+              key={message.id} 
+              className={`flex gap-4 max-w-4xl mx-auto group ${message.role === 'user' ? 'flex-row-reverse' : ''} animate-in fade-in slide-in-from-bottom-2 duration-300`}
             >
-              {/* Avatar - Model */}
-              {msg.role === 'model' && (
-                <div className={`w-8 h-8 flex-shrink-0 mt-1 shadow-lg shadow-indigo-900/20 transition-all duration-300 ${
-                  msg.isStreaming ? 'scale-105' : ''
-                }`}>
-                  <YahyaLogo className={`w-full h-full ${msg.isStreaming ? 'animate-pulse' : ''}`} />
+              <div className={`
+                w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg mt-1
+                ${message.role === 'user' 
+                  ? 'bg-zinc-800 text-zinc-100' 
+                  : message.isError 
+                    ? 'bg-red-500/10 text-red-500 border border-red-500/20' 
+                    : 'bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-indigo-500/20'
+                }
+              `}>
+                {message.role === 'user' ? <User className="w-5 h-5" /> : (message.isError ? <AlertTriangle className="w-5 h-5" /> : <YahyaLogo className="w-5 h-5" />)}
+              </div>
+              
+              <div className={`flex-1 overflow-hidden ${message.role === 'user' ? 'text-right' : ''}`}>
+                <div className={`text-xs text-zinc-500 mb-1.5 flex items-center gap-2 ${message.role === 'user' ? 'justify-end' : ''}`}>
+                  <span className="font-medium text-zinc-400">
+                    {message.role === 'user' ? 'You' : (message.isError ? 'System Error' : 'Yahya AI')}
+                  </span>
+                  {!message.isError && !message.isStreaming && (
+                     <button 
+                        onClick={() => handleCopyMessage(message.content, message.id)}
+                        className={`opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-300 ${copiedId === message.id ? 'text-green-500' : ''}`}
+                        title="Copy message"
+                     >
+                        {copiedId === message.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                     </button>
+                  )}
                 </div>
-              )}
 
-              {/* Message Bubble */}
-              <div
-                className={`relative px-5 py-3.5 rounded-2xl max-w-[85%] lg:max-w-[75%] shadow-sm ${
-                  msg.role === 'user'
-                    ? 'bg-zinc-800 text-zinc-100 rounded-tr-sm'
-                    : 'bg-transparent text-zinc-300 rounded-tl-sm px-0 lg:px-0'
-                }`}
-              >
-                {msg.image && (
-                  <div className="mb-3 overflow-hidden rounded-lg border border-zinc-700">
-                    <img src={msg.image} alt="User upload" className="max-h-64 object-cover" />
+                {message.image && (
+                    <div className={`mb-3 ${message.role === 'user' ? 'flex justify-end' : ''}`}>
+                        <img 
+                            src={message.image} 
+                            alt="Uploaded content" 
+                            className="max-w-xs sm:max-w-sm rounded-lg border border-zinc-800 shadow-xl"
+                        />
+                    </div>
+                )}
+
+                {message.isError ? (
+                  <div className="inline-block text-left bg-red-950/20 border border-red-500/30 rounded-lg p-4 text-red-200 text-sm max-w-[90%] md:max-w-2xl shadow-sm relative group/error animate-in fade-in slide-in-from-bottom-2">
+                    <div className="flex items-start gap-3">
+                      <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 pr-6">
+                        <h4 className="font-semibold text-red-400 mb-1">Request Failed</h4>
+                        <p className="opacity-90 leading-relaxed text-red-200/80">{message.content}</p>
+                      </div>
+                      {onDeleteMessage && (
+                         <button 
+                            onClick={() => onDeleteMessage(message.id)}
+                            className="absolute top-2 right-2 text-red-400/50 hover:text-red-300 hover:bg-red-500/20 p-1.5 rounded-md transition-all"
+                            title="Dismiss error"
+                         >
+                            <X className="w-3.5 h-3.5" />
+                         </button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`
+                    inline-block text-left
+                    ${message.role === 'user' 
+                      ? 'bg-zinc-800 text-zinc-100 px-5 py-3 rounded-2xl rounded-tr-sm shadow-md border border-zinc-700/50' 
+                      : 'w-full'
+                    }
+                  `}>
+                    {message.role === 'user' ? (
+                      <div className="whitespace-pre-wrap">{message.content}</div>
+                    ) : (
+                      <>
+                        {message.content ? <MarkdownRenderer content={message.content} /> : null}
+                        {message.isStreaming && message.content.length === 0 && <TypingIndicator />}
+                      </>
+                    )}
                   </div>
                 )}
                 
-                {msg.role === 'model' ? (
-                    <div className="prose prose-invert prose-p:leading-relaxed prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-800 max-w-none min-h-[24px]">
-                        {!msg.content && msg.isStreaming ? (
-                            <div className="flex items-center gap-1.5 h-6 pl-1">
-                                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce"></span>
-                            </div>
-                        ) : (
-                             <>
-                                <MarkdownRenderer content={msg.content} />
-                                {msg.isStreaming && (
-                                    <span className="inline-block w-1.5 h-4 ml-1 bg-indigo-500 animate-pulse align-sub rounded-sm shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
-                                )}
-                             </>
-                        )}
-                    </div>
-                ) : (
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                {message.isStreaming && !message.isError && message.content.length > 0 && (
+                   <span className="inline-block w-2 h-4 ml-1 bg-indigo-500 animate-pulse rounded-sm align-middle shadow-[0_0_8px_rgba(99,102,241,0.6)]"/>
                 )}
               </div>
-
-              {/* Avatar - User */}
-              {msg.role === 'user' && (
-                <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0 mt-1">
-                  <User className="w-5 h-5 text-zinc-300" />
-                </div>
-              )}
             </div>
           ))
         )}
@@ -391,124 +377,104 @@ const ChatArea: React.FC<ChatAreaProps> = ({
 
       {/* Input Area */}
       <div className="p-4 bg-zinc-950 border-t border-zinc-900">
-        <div className="max-w-4xl mx-auto relative">
-          
-          {/* Image Settings Panel (Only for Imagine Model) */}
-          {modelId === 'imagine' && (
-             <div className="mb-3 p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl grid grid-cols-1 md:grid-cols-3 gap-3 animate-in fade-in slide-in-from-bottom-2">
-                 {/* Aspect Ratio */}
-                 <div className="space-y-1">
-                     <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider flex items-center gap-1">
-                         <LayoutTemplate className="w-3 h-3" /> Aspect Ratio
-                     </label>
-                     <select 
-                        value={imageConfig.aspectRatio}
-                        onChange={(e) => setImageConfig({...imageConfig, aspectRatio: e.target.value as any})}
-                        className="w-full bg-zinc-950 text-zinc-300 text-xs p-2 rounded-lg border border-zinc-800 focus:border-indigo-500 outline-none"
-                     >
-                         {aspectRatios.map(r => <option key={r} value={r}>{r}</option>)}
-                     </select>
-                 </div>
-
-                 {/* Style */}
-                 <div className="space-y-1">
-                     <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider flex items-center gap-1">
-                         <Palette className="w-3 h-3" /> Style
-                     </label>
-                     <select 
-                        value={imageConfig.style}
-                        onChange={(e) => setImageConfig({...imageConfig, style: e.target.value})}
-                        className="w-full bg-zinc-950 text-zinc-300 text-xs p-2 rounded-lg border border-zinc-800 focus:border-indigo-500 outline-none"
-                     >
-                         <option value="">None (Default)</option>
-                         {styles.map(s => <option key={s} value={s}>{s}</option>)}
-                     </select>
-                 </div>
-
-                  {/* Negative Prompt */}
-                  <div className="space-y-1">
-                     <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider flex items-center gap-1">
-                         <Ban className="w-3 h-3" /> Negative Prompt
-                     </label>
-                     <input 
-                        type="text"
-                        value={imageConfig.negativePrompt}
-                        onChange={(e) => setImageConfig({...imageConfig, negativePrompt: e.target.value})}
-                        placeholder="e.g. blur, low quality"
-                        className="w-full bg-zinc-950 text-zinc-300 text-xs p-2 rounded-lg border border-zinc-800 focus:border-indigo-500 outline-none"
-                     />
-                 </div>
-             </div>
-          )}
-
-          {/* Image Preview */}
-          {selectedImage && (
-            <div className="absolute bottom-full left-0 mb-4 p-2 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl animate-in fade-in slide-in-from-bottom-2">
-              <img src={selectedImage} alt="Preview" className="h-20 w-20 object-cover rounded-lg" />
-              <button
-                onClick={() => setSelectedImage(null)}
-                className="absolute -top-2 -right-2 bg-zinc-800 text-zinc-400 hover:text-white rounded-full p-1 border border-zinc-700 shadow-sm"
-              >
-                <div className="sr-only">Remove image</div>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                  <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-                </svg>
-              </button>
-            </div>
-          )}
-
-          {/* Input Bar */}
-          <div className="flex items-end gap-2 bg-zinc-900/50 p-2 rounded-2xl border border-zinc-800 focus-within:border-indigo-500/50 focus-within:ring-1 focus-within:ring-indigo-500/50 transition-all shadow-lg">
+        <div className="max-w-4xl mx-auto relative group">
+            {/* Image Preview */}
+            {selectedImage && (
+                <div className="absolute bottom-full left-0 mb-3 ml-2 animate-in zoom-in-95 fade-in duration-200">
+                    <div className="relative group/image">
+                        <img src={selectedImage} alt="Preview" className="h-20 w-auto rounded-lg border border-zinc-700 shadow-xl object-cover" />
+                        <button 
+                            onClick={() => setSelectedImage(null)}
+                            className="absolute -top-2 -right-2 bg-zinc-800 text-zinc-400 hover:text-white p-1 rounded-full border border-zinc-700 shadow-sm"
+                        >
+                            <X className="w-3 h-3" />
+                        </button>
+                    </div>
+                </div>
+            )}
             
-            {/* File Upload Button */}
-            <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileSelect}
-                accept="image/*"
-                className="hidden"
-            />
-            <button
-                onClick={() => fileInputRef.current?.click()}
-                className="p-3 text-zinc-400 hover:text-indigo-400 hover:bg-zinc-800 rounded-xl transition-colors"
-                title="Upload image"
-            >
-                <ImageIconLucide className="w-5 h-5" />
-            </button>
+            <div className="absolute top-1/2 -translate-y-1/2 left-3 z-10 flex items-center gap-1">
+                 {/* Model Selector Trigger */}
+                 <div className="relative">
+                    <button 
+                        onClick={() => setShowModelSelector(!showModelSelector)}
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition-colors flex items-center gap-1.5"
+                        title="Select Model"
+                    >
+                        {currentModel.icon}
+                        <ChevronDown className="w-3 h-3 opacity-50" />
+                    </button>
+                    
+                    {/* Model Selector Dropdown */}
+                    {showModelSelector && (
+                        <>
+                            <div className="fixed inset-0 z-10" onClick={() => setShowModelSelector(false)} />
+                            <div className="absolute bottom-full left-0 mb-2 w-64 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden z-20 animate-in slide-in-from-bottom-2 zoom-in-95 duration-200">
+                                <div className="p-2 space-y-1">
+                                    <div className="px-2 py-1 text-xs font-semibold text-zinc-500 uppercase tracking-wider">Select Model</div>
+                                    {models.map(model => (
+                                        <button
+                                            key={model.id}
+                                            onClick={() => {
+                                                if(onModelChange) onModelChange(model.id);
+                                                setShowModelSelector(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-2.5 rounded-lg flex items-start gap-3 transition-colors ${
+                                                modelId === model.id ? 'bg-indigo-600/10 text-indigo-400' : 'text-zinc-300 hover:bg-zinc-800'
+                                            }`}
+                                        >
+                                            <div className="mt-0.5">{model.icon}</div>
+                                            <div>
+                                                <div className="text-sm font-medium">{model.name}</div>
+                                                <div className="text-xs text-zinc-500">{model.desc}</div>
+                                            </div>
+                                            {modelId === model.id && <Check className="w-4 h-4 ml-auto text-indigo-500" />}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    )}
+                 </div>
 
-            {/* Textarea */}
-            <textarea
-                ref={textareaRef}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={modelId === 'imagine' ? "Describe the image you want to generate..." : `Message ${currentModel.name}...`}
-                rows={1}
-                className="flex-1 bg-transparent text-zinc-100 placeholder-zinc-500 focus:outline-none resize-none py-3 px-2 max-h-48 leading-relaxed"
-            />
+                 {/* Image Upload Button */}
+                 <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept="image/*"
+                    className="hidden"
+                />
+                 <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`p-1.5 rounded-lg transition-colors ${selectedImage ? 'text-indigo-400 bg-indigo-500/10' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'}`}
+                    title="Upload Image"
+                >
+                    <ImageIcon className="w-5 h-5" />
+                </button>
+            </div>
 
-            {/* Send Button */}
-            <button
-                onClick={handleSend}
-                disabled={(!inputText.trim() && !selectedImage) || isGenerating}
-                className={`p-3 rounded-xl flex items-center justify-center transition-all duration-200 ${
-                    (!inputText.trim() && !selectedImage) || isGenerating
-                        ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed'
-                        : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-600/20'
-                }`}
-            >
-                {isGenerating ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                    <Send className="w-5 h-5" />
-                )}
-            </button>
-          </div>
-          <div className="text-center mt-2">
-            <p className="text-[10px] text-zinc-600">
-                Yahya AI V2
-            </p>
-          </div>
+          <textarea
+            ref={textareaRef}
+            value={inputText}
+            onChange={(e) => setInputText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={modelId === 'imagine' ? "Describe the image you want to generate..." : "Message Yahya..."}
+            className="w-full bg-zinc-900/50 text-zinc-100 pl-24 pr-12 py-3.5 rounded-2xl border border-zinc-800 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 focus:bg-zinc-900 transition-all resize-none min-h-[52px] max-h-[200px]"
+            rows={1}
+            disabled={isGenerating}
+          />
+
+          <button
+            onClick={handleSend}
+            disabled={(!inputText.trim() && !selectedImage) || isGenerating}
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/20"
+          >
+            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </button>
+        </div>
+        <div className="text-center mt-2">
+            <span className="text-[10px] text-zinc-600">Yahya AI can make mistakes. Consider checking important information.</span>
         </div>
       </div>
     </div>

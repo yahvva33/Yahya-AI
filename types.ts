@@ -14,6 +14,7 @@ export interface Message {
   timestamp: number;
   image?: string; // Base64 string (User upload)
   isStreaming?: boolean;
+  isError?: boolean;
 }
 
 export interface ChatSession {

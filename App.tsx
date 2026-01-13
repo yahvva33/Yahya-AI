@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { Loader2, KeyRound, ExternalLink } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import { ChatSession, Message, ModelId, ImageGenConfig } from './types';
@@ -8,7 +9,24 @@ import { geminiService } from './services/geminiService';
 const STORAGE_KEY = 'yahya_ai_sessions';
 const DEFAULT_MODEL_KEY = 'yahya_ai_default_model';
 
+const YahyaLogo = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <rect width="32" height="32" rx="10" fill="url(#logo-gradient-landing)" />
+    <path d="M10 9L16 17L22 9" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M16 17V23" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+    <defs>
+      <linearGradient id="logo-gradient-landing" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#6366f1" />
+        <stop offset="1" stopColor="#a855f7" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
 const App: React.FC = () => {
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [isCheckingKey, setIsCheckingKey] = useState(true);
+  
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -22,6 +40,40 @@ const App: React.FC = () => {
     }
     return 'flash';
   });
+
+  // Check for API key on mount
+  useEffect(() => {
+    const checkKey = async () => {
+      if ((window as any).aistudio) {
+        try {
+          const has = await (window as any).aistudio.hasSelectedApiKey();
+          setHasApiKey(has);
+        } catch (e) {
+          console.error("Error checking API key:", e);
+          setHasApiKey(false);
+        }
+      } else {
+        // Fallback: If not in the specific environment, check if process.env.API_KEY is defined
+        // or assume true for development if needed. 
+        setHasApiKey(!!process.env.API_KEY);
+      }
+      setIsCheckingKey(false);
+    };
+    checkKey();
+  }, []);
+
+  const handleConnectApiKey = async () => {
+    if ((window as any).aistudio) {
+      try {
+        await (window as any).aistudio.openSelectKey();
+        // Assuming success after closing dialog as per instructions
+        setHasApiKey(true);
+        // Reset checking to force re-render/re-check if needed, but here just setting true is faster
+      } catch (error) {
+        console.error("Failed to select key", error);
+      }
+    }
+  };
 
   // Load sessions from local storage on mount
   useEffect(() => {
@@ -86,6 +138,17 @@ const App: React.FC = () => {
   const unarchiveSession = useCallback((id: string) => {
     setSessions(prev => prev.map(s => s.id === id ? { ...s, isArchived: false } : s));
   }, []);
+
+  const handleDeleteMessage = useCallback((messageId: string) => {
+    if (currentSessionId) {
+        setSessions(prev => prev.map(s => {
+            if (s.id === currentSessionId) {
+                return { ...s, messages: s.messages.filter(m => m.id !== messageId) };
+            }
+            return s;
+        }));
+    }
+  }, [currentSessionId]);
 
   const updateSessionMessages = (sessionId: string, newMessages: Message[]) => {
     setSessions(prev => prev.map(s => {
@@ -215,13 +278,17 @@ const App: React.FC = () => {
        const errorMsg: Message = {
         id: uuidv4(),
         role: 'model',
-        content: "I apologize, but I encountered an error while processing your request.",
+        content: "I apologize, but I encountered an error while processing your request. It's possible the API key needs to be re-connected or does not have permission for this model.",
         timestamp: Date.now(),
+        isError: true
       };
-       updateSessionMessages(currentSessionId, [...updatedMessages, errorMsg]);
+       
+       // Use functional update to ensure we are modifying the latest state and cleanly replacing placeholder
        setSessions(prev => prev.map(s => {
            if (s.id === currentSessionId) {
-               return { ...s, messages: s.messages.filter(m => m.id !== aiMessageId).concat(errorMsg) };
+               // Remove the placeholder if it exists and add the error message
+               const filteredMessages = s.messages.filter(m => m.id !== aiMessageId);
+               return { ...s, messages: [...filteredMessages, errorMsg] };
            }
            return s;
        }));
@@ -229,6 +296,63 @@ const App: React.FC = () => {
       setIsGenerating(false);
     }
   };
+
+  // Render Landing Page if no API Key
+  if (isCheckingKey) {
+    return (
+      <div className="flex h-screen bg-zinc-950 text-zinc-100 items-center justify-center">
+        <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!hasApiKey) {
+    return (
+      <div className="flex flex-col h-screen bg-zinc-950 text-zinc-100 items-center justify-center p-6 animate-in fade-in duration-500">
+        <div className="max-w-md w-full text-center space-y-8">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-24 h-24 relative">
+              <div className="absolute inset-0 bg-indigo-500/20 blur-2xl rounded-full animate-pulse-slow" />
+              <YahyaLogo className="w-full h-full relative z-10" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-4xl font-bold tracking-tight">Yahya AI V2</h1>
+              <p className="text-zinc-400">Experience the next generation of AI.</p>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-6 space-y-6 shadow-xl">
+             <div className="space-y-2">
+               <h3 className="font-semibold text-lg text-white">Connect API Key</h3>
+               <p className="text-sm text-zinc-400">
+                 To access advanced models like Gemini 3 Pro and Image Generation, please connect your Google Cloud API key.
+               </p>
+             </div>
+             
+             <button
+               onClick={handleConnectApiKey}
+               className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 px-4 rounded-xl transition-all shadow-lg shadow-indigo-500/20 group"
+             >
+               <KeyRound className="w-5 h-5 group-hover:scale-110 transition-transform" />
+               Connect API Key
+             </button>
+
+             <div className="pt-4 border-t border-zinc-800">
+               <a 
+                 href="https://ai.google.dev/gemini-api/docs/billing" 
+                 target="_blank" 
+                 rel="noopener noreferrer"
+                 className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-indigo-400 transition-colors"
+               >
+                 <ExternalLink className="w-3 h-3" />
+                 View Billing Information & Pricing
+               </a>
+             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
   const currentMessages = currentSession?.messages || [];
@@ -259,6 +383,7 @@ const App: React.FC = () => {
           sessionTitle={currentSession?.title}
           modelId={currentModelId}
           onModelChange={handleModelChange}
+          onDeleteMessage={handleDeleteMessage}
         />
       </main>
     </div>
